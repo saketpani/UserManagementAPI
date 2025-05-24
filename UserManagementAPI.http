@@ -1,0 +1,44 @@
+@UserManagementAPI_HostAddress = http://localhost:5173
+@authToken = {{loginRequest.response.body.token}} # This will automatically use the token from the login response
+
+### Test: Login to get JWT token
+# @name loginRequest
+POST {{UserManagementAPI_HostAddress}}/auth/login
+Content-Type: application/json
+
+{
+    "username": "admin",
+    "password": "admin123"
+}
+
+### Test: Get all users (no auth required)
+GET {{UserManagementAPI_HostAddress}}/users
+Accept: application/json
+
+### Test: Create a new user (requires auth)
+POST {{UserManagementAPI_HostAddress}}/users
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+    "name": "Test User",
+    "email": "testuser@example.com"
+}
+
+### Test: Get user by ID (no auth required)
+GET {{UserManagementAPI_HostAddress}}/users/1
+Accept: application/json
+
+### Test: Update user by ID (requires auth)
+PUT {{UserManagementAPI_HostAddress}}/users/1
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+    "name": "Updated User",
+    "email": "updateduser@example.com"
+}
+
+### Test: Delete user by ID (requires auth)
+DELETE {{UserManagementAPI_HostAddress}}/users/1
+Authorization: Bearer {{authToken}}
