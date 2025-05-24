@@ -15,14 +15,41 @@ public class RequestResponseLoggingMiddleware
         _logger = logger;
         _recyclableMemoryStreamManager = new RecyclableMemoryStreamManager();
     }
-
     public async Task InvokeAsync(HttpContext context)
     {
         // Log the request
         await LogRequest(context);
 
         // Capture and log the response
-        await LogResponse(context);
+        var originalBodyStream = context.Response.Body;
+        using var responseStream = _recyclableMemoryStreamManager.GetStream();
+        context.Response.Body = responseStream;
+
+        try
+        {
+            await _next(context);
+
+            context.Response.Body.Seek(0, SeekOrigin.Begin);
+            var responseBody = await new StreamReader(context.Response.Body).ReadToEndAsync();
+            context.Response.Body.Seek(0, SeekOrigin.Begin);
+
+            var logMessage = $"""
+                Http Response Information:
+                Schema: {context.Request.Scheme}
+                Host: {context.Request.Host}
+                Path: {context.Request.Path}
+                StatusCode: {context.Response.StatusCode}
+                Response Body: {responseBody}
+                """;
+
+            _logger.LogInformation(logMessage);
+
+            await responseStream.CopyToAsync(originalBodyStream);
+        }
+        finally
+        {
+            context.Response.Body = originalBodyStream;
+        }
     }
 
     private async Task LogRequest(HttpContext context)
@@ -46,34 +73,6 @@ public class RequestResponseLoggingMiddleware
         _logger.LogInformation(logMessage);
         context.Request.Body.Position = 0;
     }
-
-    private async Task LogResponse(HttpContext context)
-    {
-        var originalBodyStream = context.Response.Body;
-
-        using var responseStream = _recyclableMemoryStreamManager.GetStream();
-        context.Response.Body = responseStream;
-
-        await _next(context);
-
-        context.Response.Body.Seek(0, SeekOrigin.Begin);
-        var responseBody = await new StreamReader(context.Response.Body).ReadToEndAsync();
-        context.Response.Body.Seek(0, SeekOrigin.Begin);
-
-        var logMessage = $"""
-            Http Response Information:
-            Schema: {context.Request.Scheme}
-            Host: {context.Request.Host}
-            Path: {context.Request.Path}
-            StatusCode: {context.Response.StatusCode}
-            Response Body: {responseBody}
-            """;
-
-        _logger.LogInformation(logMessage);
-
-        await responseStream.CopyToAsync(originalBodyStream);
-    }
-
     private static string ReadStreamInChunks(Stream stream)
     {
         const int readChunkBufferLength = 4096;
